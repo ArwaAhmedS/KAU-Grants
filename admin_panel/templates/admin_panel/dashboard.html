@@ -1,0 +1,255 @@
+{% extends "admin_panel/base.html" %}
+{% load static %}
+{% block content %}
+{{ initial_grants|json_script:"grants-data" }}
+{{ total_donors|json_script:"total-donors-data" }}
+{{ total_beneficiaries|json_script:"total-beneficiaries-data" }}
+{{ beneficiaries_list|json_script:"beneficiaries-list-data" }}
+{{ beneficiary_categories|json_script:"beneficiary-categories-data" }}
+
+<div dir="rtl" class="min-h-screen bg-[#f8f9fa]" style="font-family: 'IBM Plex Sans Arabic', sans-serif;"
+     x-data="dashboardPage()" x-init="init()">
+  <form id="save-grant-form" method="post" class="hidden">
+    {% csrf_token %}
+  </form>
+  {% if open_grant_id %}<div id="open-grant-flag" data-id="{{ open_grant_id }}" class="hidden"></div>{% endif %}
+  {% if open_report_grant_id %}<div id="open-report-flag" data-id="{{ open_report_grant_id }}" class="hidden"></div>{% endif %}
+  {% if open_items %}<div id="open-items-flag" class="hidden"></div>{% endif %}
+
+  <main class="max-w-screen-lg mx-auto px-4 sm:px-8 py-10">
+    <div class="mb-8">
+      <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+          <h1 class="text-[22px] font-bold text-[#161616]">{% if request.user.first_name %}أهلاً بك، {{ request.user.first_name }} 👋{% else %}أهلاً بك 👋{% endif %}</h1>
+          <p class="text-sm text-[#4d5761] mt-1">نظرة عامة على منظومة المنح والجهات في جامعة الملك عبدالعزيز</p>
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <a href="{% url 'add_donor' %}"
+             class="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg border border-[#1B8354] bg-[#F3FCF6] text-sm font-medium text-[#1B8354] hover:bg-[#1B8354] hover:text-white transition-all">
+            <span class="text-base leading-none font-semibold">+</span>
+            إضافة جهة مانحة
+          </a>
+          <a href="{% url 'add_grant' %}"
+             class="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-[#1B8354] text-sm font-medium text-white hover:bg-[#166A45] transition-all">
+            <span class="text-base leading-none font-semibold">+</span>
+            إضافة منحة
+          </a>
+        </div>
+      </div>
+    </div>
+
+    {# ── Stat cards ── #}
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+      <template x-for="s in stats" :key="s.label">
+        <div class="rounded-[16px] bg-white p-6 shadow-[0px_4px_8px_-2px_rgba(16,24,40,0.10),0px_2px_4px_-2px_rgba(16,24,40,0.06)] flex flex-col gap-4 relative overflow-hidden border border-[#1B8354]/30">
+          <span class="absolute top-0 right-0 left-0 h-[3px] rounded-t-[16px] bg-gradient-to-l from-[#1B8354] to-[#34d399]"></span>
+          <div class="flex w-[48px] h-[48px] items-center justify-center rounded-full bg-[#F3FCF6] flex-shrink-0 border border-[#D1FAE5]">
+            <span x-html="s.icon" class="w-5 h-5 text-[#1B8354]"></span>
+          </div>
+          <div>
+            <div class="text-[22px] font-extrabold text-[#14573a] leading-tight tracking-tight" x-text="s.value"></div>
+            <div class="text-xs text-[#4d5761] mt-1 leading-snug" x-text="s.label"></div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    {# ── Search grants ── #}
+    <div class="rounded-[16px] bg-white shadow-[0px_4px_8px_-2px_rgba(16,24,40,0.10),0px_2px_4px_-2px_rgba(16,24,40,0.06)]" style="overflow: clip;">
+      <div class="px-6 pt-5 pb-4 border-b border-[#E5E7EB]">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-base font-semibold text-[#161616]">ابحث عن منحة</h2>
+          <div class="inline-flex h-7 items-center gap-1 bg-[#f3fcf6] px-3 rounded-full">
+            <span class="text-sm font-medium text-[#14573a]"><span x-text="filteredGrants.length"></span> نتيجة</span>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="relative flex-1">
+            <svg class="absolute top-1/2 -translate-y-1/2 right-3 w-4 h-4 text-[#9DA4AE] pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="m21 21-4.3-4.3"/></svg>
+            <input type="text" x-model="query" placeholder="ابحث باسم المنحة أو الجهة المانحة أو المستفيدة…"
+                   class="w-full bg-[#F3F4F6] border border-[#E5E7EB] rounded-lg pr-9 pl-4 py-2 text-sm text-[#161616] placeholder:text-[#9DA4AE] focus:outline-none focus:border-[#1B8354] focus:ring-1 focus:ring-[#1B8354]/20 transition-all" />
+          </div>
+          <div class="relative flex-shrink-0">
+            <select x-model="typeFilter" class="h-9 bg-white border border-[#E5E7EB] rounded-lg pr-3 pl-8 text-sm text-[#161616] focus:outline-none focus:border-[#1B8354] focus:ring-1 focus:ring-[#1B8354]/20 transition-all cursor-pointer appearance-none">
+              <option value="الكل">الكل</option>
+              <option value="مالي">مالي</option>
+              <option value="عيني">عيني</option>
+            </select>
+            <svg class="absolute top-1/2 -translate-y-1/2 left-2.5 w-3.5 h-3.5 text-[#9DA4AE] pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></svg>
+          </div>
+          <div class="relative flex-shrink-0">
+            <select x-model="grantSort" class="h-9 bg-white border border-[#E5E7EB] rounded-lg pr-3 pl-8 text-sm text-[#161616] focus:outline-none focus:border-[#1B8354] focus:ring-1 focus:ring-[#1B8354]/20 transition-all cursor-pointer appearance-none">
+              <option value="date-desc">التاريخ: الأحدث أولاً</option>
+              <option value="date-asc">التاريخ: الأقدم أولاً</option>
+              <option value="amount-desc">المبلغ: الأعلى أولاً</option>
+              <option value="amount-asc">المبلغ: الأقل أولاً</option>
+            </select>
+            <svg class="absolute top-1/2 -translate-y-1/2 left-2.5 w-3.5 h-3.5 text-[#9DA4AE] pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></svg>
+          </div>
+
+          {# Date range picker — exact port of components/DateRangePicker.tsx #}
+          <div class="relative flex-shrink-0" @click.outside="dpOpen = false; dpHover = null">
+            <button
+              @click="dpToggleOpen()"
+              :class="dpOpen
+                ? 'h-9 inline-flex items-center gap-1.5 border rounded-xl px-3 text-sm whitespace-nowrap transition-all shadow-sm bg-white border-[#1B8354] ring-2 ring-[#1B8354]/15 text-[#1B8354]'
+                : (dpLabel() ? 'h-9 inline-flex items-center gap-1.5 border rounded-xl px-3 text-sm whitespace-nowrap transition-all shadow-sm bg-[#F3FCF6] border-[#1B8354]/40 text-[#14573a] font-medium' : 'h-9 inline-flex items-center gap-1.5 border rounded-xl px-3 text-sm whitespace-nowrap transition-all shadow-sm bg-white border-[#E5E7EB] text-[#9DA4AE] hover:border-[#d1d5db]')"
+            >
+              <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 2v4"/><path stroke-linecap="round" d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path stroke-linecap="round" d="M3 10h18"/><path stroke-linecap="round" d="M8 14h.01"/><path stroke-linecap="round" d="M12 14h.01"/><path stroke-linecap="round" d="M16 14h.01"/><path stroke-linecap="round" d="M8 18h.01"/><path stroke-linecap="round" d="M12 18h.01"/><path stroke-linecap="round" d="M16 18h.01"/></svg>
+              <span class="max-w-[160px] truncate" x-text="dpLabel() || 'اختر التاريخ'"></span>
+              <span
+                x-show="dpLabel()"
+                @click.stop="dpClear()"
+                class="mr-0.5 flex items-center justify-center w-5 h-5 rounded-full bg-[#14573a]/15 hover:bg-[#14573a]/30 text-[#14573a] transition-colors flex-shrink-0"
+              >
+                <svg class="w-3 h-3" stroke-width="2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+              </span>
+            </button>
+
+            <div
+              x-show="dpOpen"
+              x-cloak
+              class="absolute top-full mt-2 left-0 z-50 bg-white rounded-2xl border border-[#E5E7EB] shadow-[0px_12px_40px_-4px_rgba(16,24,40,0.18),0px_4px_12px_-4px_rgba(16,24,40,0.10)] p-4 select-none"
+              style="width: 292px;"
+              dir="ltr"
+            >
+              {# Quick year pick #}
+              <div class="flex items-center justify-between gap-2 mb-3 pb-3 border-b border-[#F3F4F6]" dir="rtl">
+                <span class="text-xs text-[#4d5761] whitespace-nowrap">أو اختر سنة كاملة</span>
+                <div class="relative flex-1">
+                  <select
+                    @change="dpPickYear($event)"
+                    class="w-full h-8 border border-[#d2d6db] rounded-lg pr-2 pl-7 text-xs text-[#161616] focus:outline-none focus:border-[#1B8354] focus:ring-1 focus:ring-[#1B8354]/20 bg-white appearance-none"
+                  >
+                    <option value="" selected disabled>اختر السنة</option>
+                    <template x-for="y in dpYearOptions" :key="y">
+                      <option :value="y" x-text="y"></option>
+                    </template>
+                  </select>
+                  <svg class="absolute top-1/2 -translate-y-1/2 left-2 w-3 h-3 text-[#9DA4AE] pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></svg>
+                </div>
+              </div>
+
+              {# Month nav #}
+              <div class="flex items-center justify-between mb-3">
+                <button @click="dpPrevMonth()" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#F3F4F6] text-[#6B7280] transition-colors">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m15 18-6-6 6-6"/></svg>
+                </button>
+                <span class="text-sm font-semibold text-[#161616]" dir="rtl" x-text="dpMonthsAr[dpViewMonth] + ' ' + dpViewYear"></span>
+                <button @click="dpNextMonth()" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#F3F4F6] text-[#6B7280] transition-colors">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m9 18 6-6-6-6"/></svg>
+                </button>
+              </div>
+
+              {# Day labels #}
+              <div class="grid grid-cols-7 mb-1">
+                <template x-for="d in dpDaysAr" :key="d">
+                  <div class="text-center text-[10px] font-semibold text-[#9DA4AE] py-1" x-text="d"></div>
+                </template>
+              </div>
+
+              {# Day grid #}
+              <div class="grid grid-cols-7">
+                <template x-for="(cell, idx) in dpCells()" :key="idx">
+                  <div>
+                    <div x-show="!cell.iso" class="h-8"></div>
+                    <div
+                      x-show="cell.iso"
+                      @click="dpPickDay(cell.iso)"
+                      @mouseenter="dpStage === 'to' && (dpHover = cell.iso)"
+                      @mouseleave="dpStage === 'to' && (dpHover = null)"
+                      :class="`relative h-8 flex items-center justify-center cursor-pointer group ${dpInRange(cell.iso) ? 'bg-[#E8F8EF]' : ''}`"
+                    >
+                      <span x-show="dpIsFrom(cell.iso) && dpEffectiveTo()" class="absolute inset-y-0 left-1/2 right-0 bg-[#E8F8EF]"></span>
+                      <span x-show="dpIsTo(cell.iso) && dateRange.from" class="absolute inset-y-0 left-0 right-1/2 bg-[#E8F8EF]"></span>
+                      <span x-show="dpIsEndpoint(cell.iso)" class="absolute inset-[3px] rounded-full bg-[#1B8354] shadow-sm"></span>
+                      <span x-show="!dpIsEndpoint(cell.iso) && !dpInRange(cell.iso)" class="absolute inset-[2px] rounded-lg bg-[#F3FCF6] opacity-0 group-hover:opacity-100 transition-opacity"></span>
+                      <span x-show="cell.iso === dpTodayISO && !dpIsEndpoint(cell.iso)" class="absolute bottom-[3px] left-1/2 -translate-x-1/2 w-[3px] h-[3px] rounded-full bg-[#1B8354]"></span>
+                      <span
+                        class="relative z-10 text-xs leading-none"
+                        :class="dpIsEndpoint(cell.iso) ? 'text-white font-bold' : (dpInRange(cell.iso) ? 'text-[#14573a] font-medium' : 'text-[#374151]')"
+                        x-text="cell.day"
+                      ></span>
+                    </div>
+                  </div>
+                </template>
+              </div>
+
+              {# Hint #}
+              <div class="mt-3 pt-2.5 border-t border-[#F3F4F6] text-center text-[10px] text-[#9DA4AE]" dir="rtl">
+                <span x-show="dpStage === 'from'">اضغط لاختيار تاريخ البداية</span>
+                <span x-show="dpStage !== 'from'" x-text="'اختر تاريخ النهاية' + (dateRange.from ? ' · البداية: ' + dpFmt(dateRange.from) : '')"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="min-height: 400px; max-height: 400px; overflow-y: auto;">
+        <template x-if="filteredGrants.length === 0">
+          <div class="flex items-center justify-center h-full" style="min-height: 400px;">
+            <p class="text-sm text-[#9DA4AE]">لا توجد نتائج مطابقة للبحث</p>
+          </div>
+        </template>
+        <table x-show="filteredGrants.length > 0" class="w-full text-sm">
+          <thead class="sticky top-0 z-10">
+            <tr class="bg-[#F3F4F6] border-b border-[#E5E7EB]">
+              <th class="text-right px-6 py-3 text-xs font-semibold text-[#4d5761] w-10">م</th>
+              <th class="text-right px-4 py-3 text-xs font-semibold text-[#4d5761]">المنحة</th>
+              <th class="text-right px-4 py-3 text-xs font-semibold text-[#4d5761] hidden sm:table-cell">الجهة المانحة</th>
+              <th class="text-right px-4 py-3 text-xs font-semibold text-[#4d5761] hidden sm:table-cell">الجهة المستفيدة</th>
+              <th class="text-right px-4 py-3 text-xs font-semibold text-[#4d5761]">النوع</th>
+              <th class="text-right px-4 py-3 text-xs font-semibold text-[#4d5761] hidden sm:table-cell">المبلغ</th>
+              <th class="text-right px-4 py-3 text-xs font-semibold text-[#4d5761] hidden sm:table-cell">تقرير الأثر</th>
+              <th class="text-right px-4 py-3 text-xs font-semibold text-[#4d5761]">تفاصيل المنحة</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-[#E5E7EB]">
+            <template x-for="(g, i) in filteredGrants" :key="g.id">
+              <tr class="hover:bg-[#F9FAFB] transition-colors group">
+                <td class="px-6 py-3.5 text-xs font-mono text-[#9DA4AE]" x-text="String(i + 1).padStart(2, '0')"></td>
+                <td class="px-4 py-3.5">
+                  <div class="font-semibold text-[#161616] leading-snug" x-text="g.title"></div>
+                  <div class="text-xs text-[#4d5761] mt-0.5" x-text="isoToDisplay(g.date)"></div>
+                </td>
+                <td class="px-4 py-3.5 text-[#1f2a37] hidden sm:table-cell text-sm" x-text="g.donor"></td>
+                <td class="px-4 py-3.5 text-[#1f2a37] hidden sm:table-cell text-sm" x-text="g.beneficiary"></td>
+                <td class="px-4 py-3.5">
+                  <span class="inline-flex h-7 items-center bg-[#f3fcf6] px-2.5 rounded-full text-xs font-medium text-[#14573a]" x-text="g.type"></span>
+                </td>
+                <td class="px-4 py-3.5 hidden sm:table-cell text-sm font-medium text-[#1f2a37] whitespace-nowrap" x-text="g.amount + ' ﷼'"></td>
+                <td class="px-4 py-3.5 hidden sm:table-cell">
+                  <button @click.stop="openReportCard(g.id)"
+                          :class="g.reports.length > 0 ? 'border-[#1B8354] text-[#1B8354] hover:bg-[#1B8354] hover:text-white' : 'border-[#d2d6db] text-[#4d5761] hover:border-[#1B8354] hover:text-[#1B8354]'"
+                          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all whitespace-nowrap">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+                    <span x-text="g.reports.length > 0 ? 'عرض التقرير' : 'رفع تقرير'"></span>
+                  </button>
+                </td>
+                <td class="px-4 py-3.5">
+                  <button @click="openGrant(g.id)"
+                          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#1B8354] text-xs font-medium text-[#1B8354] hover:bg-[#1B8354] hover:text-white transition-all whitespace-nowrap">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
+                    الذهاب للمنحة
+                  </button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  {% include "admin_panel/partials/_grant_detail_modal.html" %}
+
+  {% include "admin_panel/partials/_grant_items_modal.html" %}
+
+  {% include "admin_panel/partials/_report_card_modal.html" %}
+
+</div>
+
+<script src="{% static 'admin_panel/js/grant_cards.js' %}"></script>
+<script src="{% static 'admin_panel/js/date_range_picker.js' %}"></script>
+<script src="{% static 'admin_panel/js/pages/dashboard.js' %}"></script>
+{% endblock %}

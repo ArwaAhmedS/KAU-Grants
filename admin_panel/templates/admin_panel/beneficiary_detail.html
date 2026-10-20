@@ -1,0 +1,168 @@
+{% extends "admin_panel/base.html" %}
+{% load static %}
+{% block content %}
+{{ beneficiary_info|json_script:"beneficiary-data" }}
+{{ grants_data|json_script:"grants-data" }}
+{{ total_beneficiaries|json_script:"total-beneficiaries-data" }}
+{{ beneficiaries_list|json_script:"beneficiaries-list-data" }}
+{{ beneficiary_categories|json_script:"beneficiary-categories-data" }}
+
+<div dir="rtl" class="min-h-screen bg-[#f8f9fa]" style="font-family: 'IBM Plex Sans Arabic', sans-serif;"
+     x-data="beneficiaryDetailPage()" x-init="init()">
+  <form id="csrf-form" method="post" class="hidden">
+    {% csrf_token %}
+  </form>
+  {% if open_report_grant_id %}<div id="open-report-flag" data-id="{{ open_report_grant_id }}" class="hidden"></div>{% endif %}
+  {% if open_grant_id %}<div id="open-grant-flag" data-id="{{ open_grant_id }}" class="hidden"></div>{% endif %}
+  {% if open_items %}<div id="open-items-flag" class="hidden"></div>{% endif %}
+
+  <template x-if="!bData">
+    <div class="min-h-screen flex items-center justify-center">
+      <div class="text-center">
+        <p class="text-[#4d5761] text-sm mb-4">الجهة المستفيدة غير موجودة</p>
+        <a href="{% url 'beneficiary_list' %}" class="text-[#1B8354] text-sm hover:underline">← العودة للقائمة</a>
+      </div>
+    </div>
+  </template>
+
+  <template x-if="bData">
+    <div>
+      <main class="max-w-screen-lg mx-auto px-4 sm:px-8 py-10">
+
+        <a href="{% url 'beneficiary_list' %}" class="inline-flex items-center gap-1.5 text-sm text-[#4d5761] hover:text-[#1B8354] transition-colors mb-6">
+          <svg class="w-3.5 h-3.5" style="transform: rotate(180deg);" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m12 19-7-7 7-7"/><path stroke-linecap="round" stroke-linejoin="round" d="M19 12H5"/></svg>
+          الجهات المستفيدة
+        </a>
+
+        {# Identity card #}
+        <div class="rounded-[16px] bg-white p-6 shadow-[0px_4px_8px_-2px_rgba(16,24,40,0.10),0px_2px_4px_-2px_rgba(16,24,40,0.06)] mb-8 flex items-center justify-between gap-4">
+          <div class="flex items-center gap-4">
+            <div class="flex w-[56px] h-[56px] items-center justify-center rounded-full bg-[#F3FCF6] flex-shrink-0">
+              <span class="text-2xl font-bold text-[#1B8354]" x-text="bData.name.charAt(0)"></span>
+            </div>
+            <div class="flex-1">
+              <template x-if="beneficiaryEditMode">
+                <div class="flex flex-col gap-2">
+                  <input type="text" x-model="editBeneficiaryName" placeholder="اسم الجهة"
+                         class="w-full bg-white border border-[#d2d6db] rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#1B8354] focus:ring-1 focus:ring-[#1B8354]/20 transition-all font-bold text-[16px]" />
+                  <div class="flex items-center gap-2">
+                    <button @click="saveBeneficiaryEdit()" :disabled="savingBeneficiary" class="inline-flex items-center gap-1.5 h-7 px-3 rounded-lg bg-[#1B8354] text-white text-xs font-semibold hover:bg-[#14573a] transition-colors disabled:opacity-60">
+                      <span x-text="savingBeneficiary ? 'جارٍ الحفظ...' : 'حفظ'"></span>
+                    </button>
+                    <button @click="cancelBeneficiaryEdit()" class="inline-flex items-center gap-1.5 h-7 px-3 rounded-lg border border-[#d2d6db] text-xs font-medium text-[#161616] hover:bg-[#F3F4F6] transition-colors">
+                      إلغاء
+                    </button>
+                  </div>
+                </div>
+              </template>
+              <template x-if="!beneficiaryEditMode">
+                <div>
+                  <h1 class="text-[20px] font-bold text-[#161616] leading-7" x-text="bData.name"></h1>
+                  <p class="text-sm text-[#4d5761] mt-0.5">جهة مستفيدة داخلية - جامعة الملك عبدالعزيز</p>
+                </div>
+              </template>
+            </div>
+          </div>
+
+        </div>
+
+        {# Stats #}
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-8">
+          <template x-for="s in stats" :key="s.label">
+            <div class="rounded-[16px] bg-white p-6 shadow-[0px_4px_8px_-2px_rgba(16,24,40,0.10),0px_2px_4px_-2px_rgba(16,24,40,0.06)] flex items-center gap-4">
+              <div class="flex w-[48px] h-[48px] items-center justify-center rounded-full bg-[#F3FCF6] flex-shrink-0">
+                <span x-html="s.icon" class="w-5 h-5 text-[#1B8354]"></span>
+              </div>
+              <div>
+                <div class="text-[18px] font-bold text-[#1B8354] leading-7" x-text="s.value"></div>
+                <div class="text-sm text-[#4d5761]" x-text="s.label"></div>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        {# Grants table #}
+        <div class="rounded-[16px] bg-white shadow-[0px_4px_8px_-2px_rgba(16,24,40,0.10),0px_2px_4px_-2px_rgba(16,24,40,0.06)] overflow-hidden">
+          <div class="flex items-center justify-between gap-3 px-6 py-4 border-b border-[#E5E7EB]">
+            <h2 class="text-base font-semibold text-[#161616]">منح الجهة</h2>
+            <div class="flex items-center gap-2">
+              <div class="relative">
+                <select x-model="grantSort" class="h-8 bg-white border border-[#E5E7EB] rounded-lg pr-2.5 pl-7 text-xs text-[#161616] focus:outline-none focus:border-[#1B8354] focus:ring-1 focus:ring-[#1B8354]/20 transition-all cursor-pointer appearance-none">
+                  <option value="" disabled>الترتيب</option>
+                  <option value="date-desc">التاريخ: الأحدث أولاً</option>
+                  <option value="date-asc">التاريخ: الأقدم أولاً</option>
+                  <option value="amount-desc">المبلغ: الأعلى أولاً</option>
+                  <option value="amount-asc">المبلغ: الأقل أولاً</option>
+                </select>
+                <svg class="absolute top-1/2 -translate-y-1/2 left-2 w-3 h-3 text-[#9DA4AE] pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></svg>
+              </div>
+              <div class="inline-flex h-8 items-center gap-1 bg-[#f3fcf6] px-3 rounded-full">
+                <span class="text-sm font-medium text-[#14573a]"><span x-text="grants.length"></span> منح</span>
+              </div>
+            </div>
+          </div>
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-[#F3F4F6] border-b border-[#E5E7EB]">
+                <th class="text-right px-6 py-3 text-xs font-semibold text-[#4d5761] w-10">م</th>
+                <th class="text-right px-4 py-3 text-xs font-semibold text-[#4d5761]">المنحة</th>
+                <th class="text-right px-4 py-3 text-xs font-semibold text-[#4d5761]">نوع المنحة</th>
+                <th class="text-right px-4 py-3 text-xs font-semibold text-[#4d5761]">الجهة المانحة</th>
+                <th class="text-right px-4 py-3 text-xs font-semibold text-[#4d5761]">المبلغ</th>
+                <th class="text-right px-4 py-3 text-xs font-semibold text-[#4d5761]">تقرير الأثر</th>
+                <th class="text-right px-4 py-3 text-xs font-semibold text-[#4d5761] w-10">تفاصيل المنحة</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-[#E5E7EB]">
+              <template x-for="(g, i) in sortedGrants" :key="g.id">
+                <tr @click="openGrant(g.id)" class="hover:bg-[#F3F4F6] transition-colors cursor-pointer group">
+                  <td class="px-6 py-4 text-xs font-mono text-[#9DA4AE]" x-text="String(i + 1).padStart(2, '0')"></td>
+                  <td class="px-4 py-4 font-semibold text-[#161616]">
+                    <div x-text="g.title"></div>
+                    <div class="text-xs text-[#4d5761] font-normal mt-0.5" x-text="isoToDisplay(g.date)"></div>
+                  </td>
+                  <td class="px-4 py-4">
+                    <div class="inline-flex h-8 items-center bg-[#f3fcf6] px-3 rounded-full">
+                      <span class="text-sm font-medium text-[#14573a]" x-text="g.type"></span>
+                    </div>
+                  </td>
+                  <td class="px-4 py-4">
+                    <div class="flex items-center gap-2">
+                      <div class="flex w-[32px] h-[32px] items-center justify-center rounded-full bg-[#F3FCF6] flex-shrink-0">
+                        <svg class="w-3.5 h-3.5 text-[#1B8354]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M22 10v6"/><path stroke-linecap="round" stroke-linejoin="round" d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/></svg>
+                      </div>
+                      <span class="text-[#1f2a37]" x-text="g.donor"></span>
+                    </div>
+                  </td>
+                  <td class="px-4 py-4 text-sm font-medium text-[#1f2a37] whitespace-nowrap" x-text="g.amount + ' ﷼'"></td>
+                  <td class="px-4 py-4">
+                    <button @click.stop="openReportCard(g.id)"
+                            :class="g.reports.length > 0 ? 'border-[#1B8354] text-[#1B8354] hover:bg-[#1B8354] hover:text-white' : 'border-[#d2d6db] text-[#4d5761] hover:border-[#1B8354] hover:text-[#1B8354]'"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all whitespace-nowrap">
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+                      <span x-text="g.reports.length > 0 ? 'عرض التقرير' : 'رفع تقرير'"></span>
+                    </button>
+                  </td>
+                  <td class="px-4 py-4">
+                    <svg class="w-4 h-4 text-[#4d5761] group-hover:text-[#1B8354] transition-colors" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m12 19-7-7 7-7"/><path stroke-linecap="round" stroke-linejoin="round" d="M19 12H5"/></svg>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </main>
+
+    </div>
+  </template>
+
+  {% include "admin_panel/partials/_grant_detail_modal.html" %}
+
+  {% include "admin_panel/partials/_grant_items_modal.html" %}
+
+  {% include "admin_panel/partials/_report_card_modal.html" %}
+</div>
+
+<script src="{% static 'admin_panel/js/grant_cards.js' %}"></script>
+<script src="{% static 'admin_panel/js/pages/beneficiary_detail.js' %}"></script>
+{% endblock %}
