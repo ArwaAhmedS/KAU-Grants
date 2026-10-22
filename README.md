@@ -6,6 +6,12 @@ A system for managing grants and relationships between donor organizations and b
 
 
 
+https://github.com/user-attachments/assets/11ec7696-21f3-4679-8209-b951b36dfd4f
+
+
+
+
+
 
 The system was built as a proof of concept and consists of four parts:
 
